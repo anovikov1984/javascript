@@ -1459,6 +1459,8 @@ THE SOFTWARE.
 var NOW                 = 1
 ,   http                = require('http')
 ,   https               = require('https')
+,   keepAliveAgent      = false
+,   keepAliveAgentConfig= {keepAlive: true, keepAliveMsecs: 300000}
 ,   XHRTME              = 310000
 ,   DEF_TIMEOUT         = 10000
 ,   SECOND              = 1000
@@ -1551,7 +1553,7 @@ function xdr( setup ) {
     options.path     = proxy ? "http://" + origin + url:url;
     options.headers  = proxy ? { 'Host': origin }:null;
     options.method   = mode;
-    options.agent    = false;
+    options.agent    = keepAliveAgent;
     options.body     = payload;
 
     require('http').globalAgent.maxSockets = Infinity;
@@ -1640,6 +1642,9 @@ function crypto_obj() {
     }
 }
 
+function keepAliveIsEmbedded() {
+  return 'EventEmitter' in http.Agent.super_;
+}
 
 
 var CREATE_PUBNUB = function(setup) {
@@ -1650,6 +1655,26 @@ var CREATE_PUBNUB = function(setup) {
     setup['hmac_SHA256'] = get_hmac_SHA256;
     setup['crypto_obj'] = crypto_obj();
     setup['params'] = {'pnsdk' : PNSDK};
+
+    if (setup['keepAlive'] === true && !('agent' in setup) && !keepAliveIsEmbedded()) {
+      throw new Exception('To use keep-alive connection with node <= 0.11.12 you should specify 3rd party agent. More info http://error-description.com');
+    }
+
+    if (typeof setup['agent'] === 'object') {
+      throw new Exception('You specified agent as an object, but it should be a function.');
+    }
+
+    if (typeof setup['agent'] === 'function') {
+      keepAliveAgent = new setup['agent'](keepAliveAgentConfig);
+    }
+
+    if (!(setup['keepAlive'] === false) && keepAliveIsEmbedded()) {
+      keepAliveAgent = new http.Agent(keepAliveAgentConfig);
+    }
+
+    delete setup['keepAlive'];
+    delete setup['agent'];
+
     SELF = function(setup) {
         return CREATE_PUBNUB(setup);
     }
@@ -1670,3 +1695,4 @@ CREATE_PUBNUB.unique = unique
 CREATE_PUBNUB.secure = CREATE_PUBNUB;
 module.exports = CREATE_PUBNUB
 module.exports.PNmessage = PNmessage;
+module.exports.keepAliveIsEmbedded = keepAliveIsEmbedded;
